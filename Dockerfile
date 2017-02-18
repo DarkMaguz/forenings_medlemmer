@@ -8,17 +8,13 @@ ENV PYTHONUNBUFFERED 1
 RUN mkdir /usr/app
 WORKDIR /usr/app
 
-#ADD . /usr/app/
+# Copy python requirements file.
 ADD requirements.txt /usr/app/
+# Install from the requirements file.
 RUN pip install -r requirements.txt
-#ADD . /usr/app/
 
-#RUN python manage.py migrate
-#RUN python manage.py loaddata fixtures/templates.json
-#RUN python manage.py loaddata fixtures/unions.json
-#RUN python manage.py loaddata fixtures/departments.json
-
-# Open port
+# Open port.
 EXPOSE 8000
 
+# Set the default command to be executed.
 CMD ["/usr/app/docker-run.sh"]
