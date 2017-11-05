@@ -31,10 +31,3 @@ source virtualenv/bin/activate
 ```
 ./manage.py migrate
 ```
-
-## Docker container:
-```
-install latest version of Docker(currently 1.13.1)
-./run-local.sh
-```
-
