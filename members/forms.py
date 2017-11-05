@@ -1,9 +1,10 @@
 from django import forms
 from django.conf import settings
-from django.core.urlresolvers import reverse
-from members.models import Department, Person, Payment, ActivityParticipant
+from members.models.department import Department
+from members.models.person import Person
+from members.models.payment import Payment
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Fieldset, Submit, MultiField, Field, Hidden, HTML, Div, Button
+from crispy_forms.layout import Layout, Fieldset, Submit, Field, Hidden, HTML, Div
 from crispy_forms.bootstrap import FormActions
 
 class PersonForm(forms.ModelForm):
@@ -13,7 +14,7 @@ class PersonForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.html5_required = True
-        if self.instance != None and self.instance.membertype == Person.CHILD:
+        if self.instance is not None and self.instance.membertype == Person.CHILD:
             nameFieldSet = Fieldset('Barnets oplysninger',
                     Div(
                          Div(Field('gender'), css_class="col-md-2"),
@@ -64,7 +65,7 @@ class PersonForm(forms.ModelForm):
                             css_class="row"
                            )
                      ),
-            Submit('submit', 'Opret' if self.instance.id == None else 'Ret', css_class="btn-success"),
+            Submit('submit', 'Opret' if self.instance.id is None else 'Ret', css_class="btn-success"),
             HTML("""<a class="btn btn-link" href="{% url 'family_detail' person.family.unique %}">Fortryd</a>""")
         )
         self.helper.render_unmentioned_fields = False
@@ -269,7 +270,7 @@ class ActivitySignupForm(forms.Form):
     # photo_permission = forms.ChoiceField(label="Må Coding Pirates tage og bruge billeder af dit barn på aktiviteten? (Billederne lægges typisk på vores hjemmeside og Facebook side)", initial=ActivityParticipant.PHOTO_OK, required=True, choices=((ActivityParticipant.PHOTO_OK, 'Ja, det er OK'),(ActivityParticipant.PHOTO_NOTOK, 'Nej, vi vil ikke have i fotograferer')))
     address_permission = forms.ChoiceField(label="Må vi sætte din email samt telefonnummer på holdlisten, der er synlig for de andre deltagere?", initial='YES', required=True, choices=( ('YES', 'Ja'), ('NO', 'Nej') ))
     read_conditions = forms.ChoiceField(label="Har du <a target='_blank' href=https://codingpirates.dk/coding-pirates-medlemskab/>læst</a> og accepterer du vores handelsbetingelser?", initial='YES', required=True, choices=( ('YES', 'Ja'), ('NO', 'Nej') ))
-    payment_option = forms.ChoiceField(label="Vælg betalings metode", required=True, choices=((Payment.CREDITCARD, 'Betalingskort'), (Payment.OTHER, 'Andet er aftalt')))
+    payment_option = forms.ChoiceField(label="Vælg betalings metode", required=True, choices=((Payment.CREDITCARD, 'Betalingskort / MobilePay'), (Payment.OTHER, 'Andet er aftalt')))
 
 class ActivivtyInviteDeclineForm(forms.Form):
     def __init__(self, *args, **kwargs):

@@ -135,13 +135,14 @@ EMAIL_USE_TLS = True
 EMAIL_TIMEOUT = 30
 
 if DEBUG:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend';
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 CRON_CLASSES = [
     "members.jobs.EmailSendCronJob",
     'members.jobs.RequestConfirmationCronJob',
     'members.jobs.SendActivitySignupConfirmationsCronJob',
-    'members.jobs.PollQuickpayPaymentsCronJob'
+    'members.jobs.PollQuickpayPaymentsCronJob',
+    'members.jobs.GenerateStatisticsCronJob'
 ]
 
 # Dont keep job logs more than 7 days old

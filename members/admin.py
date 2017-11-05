@@ -2,8 +2,23 @@ from uuid import uuid4
 from django import forms
 from django.contrib import admin
 from django.db import models
+from django.db import transaction
 from django.db.models import Q
-from members.models import Person, Department, Union, Volunteer, Member, Activity, ActivityInvite, ActivityParticipant,Family, EmailItem, WaitingList, EmailTemplate, AdminUserInformation, QuickpayTransaction, Payment, Equipment, EquipmentLoan
+from members.models.person import Person
+from members.models.department import Department, AdminUserInformation
+from members.models.union import Union
+from members.models.volunteer import Volunteer
+from members.models.member import Member
+from members.models.activity import Activity
+from members.models.activityinvite import ActivityInvite
+from members.models.activityparticipant import ActivityParticipant
+from members.models.family import Family
+from members.models.emailitem import EmailItem
+from members.models.waitinglist import WaitingList
+from members.models.emailtemplate import EmailTemplate
+from members.models.payment import Payment
+from members.models.equipment import Equipment
+from members.models.equipmentloan import EquipmentLoan
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.db.models.functions import Lower
@@ -13,6 +28,9 @@ from datetime import timedelta
 from django.core.urlresolvers import reverse
 from django.utils.html import format_html
 from django.forms import Textarea
+from django.shortcuts import render
+from django.contrib.admin.widgets import AdminDateWidget
+from django.contrib import messages
 
 admin.site.site_header="Coding Pirates Medlemsdatabase"
 admin.site.index_title="Site Admin"
@@ -43,8 +61,8 @@ class UnionAdmin(admin.ModelAdmin):
             'secratary_email', 'boardMembers')}),
 
         ('Info',
-            {'fields':('statues', 'founded'), 'description':
-            'Indsæt et link til jeres vedtægter og hvornår i er stiftet'})
+            {'fields':('bank_main_org', 'bank_account', 'statues', 'founded'), 'description':
+            'Indsæt et link til jeres vedtægter, hvornår I er stiftet (har holdt stiftende generalforsamling) og jeres bankkonto hvis I har sådan en til foreningen.'})
     ]
 
     list_display = ('name', )
@@ -63,7 +81,7 @@ class UnionDepartmentFilter(admin.SimpleListFilter):
 
     def queryset(self, request, queryset):
         print(self.value())
-        if(self.value() == None):
+        if(self.value() is None):
             return queryset
         else:
             return queryset.filter(union=self.value())
@@ -145,13 +163,14 @@ class ActivityAdmin(admin.ModelAdmin):
         }
          ),
         ('Aktivitet',
-            {'description' : '<p>Aktivitets navnet skal afspejle aktivitet samt tidspunkt. F.eks. <em>Forårs sæson 2016</em>.</p><p>Tidspunkt er f.eks. <em>Onsdage 17:00-19:00</em></p>',
+            {'description' : '<p>Aktivitetsnavnet skal afspejle aktivitet samt tidspunkt. F.eks. <em>Forårssæson 2018</em>.</p><p>Tidspunkt er f.eks. <em>Onsdage 17:00-19:00</em></p>',
             'fields': (
             'name',
             'open_hours',
             'description',
             'start_date',
             'end_date',
+            'member_justified',
         )
         }
          ),
@@ -347,7 +366,7 @@ class ActivityParticipantListFilter(admin.SimpleListFilter):
         return activitys
 
     def queryset(self, request, queryset):
-        if(self.value() == None):
+        if(self.value() is None):
             return queryset
         else:
             return queryset.filter(activity=self.value())
@@ -413,7 +432,7 @@ class ActivivtyInviteActivityListFilter(admin.SimpleListFilter):
         # Compare the requested value (either '80s' or '90s')
         # to decide how to filter the queryset.
 
-        if self.value() == None:
+        if self.value() is None:
             return queryset
         else:
             return queryset.filter(activity__pk=self.value())
@@ -434,7 +453,7 @@ class ActivityInviteAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-        'description' : '<p>Invitationer til en aktivitet laves nemmere via "person" oversigten. Gå derind og filtrer efter f.eks. børn på venteliste til din afdeling og sorter efter opskrivningsdato, eller filter medlemmer på forrige sæson. Herefter kan du trykke på personen og tilføje invitationer til personens invitations liste.</p>',
+        'description' : '<p>Invitationer til en aktivitet laves nemmere via "person" oversigten. Gå derind og filtrer efter f.eks. børn på venteliste til din afdeling og sorter efter opskrivningsdato, eller filter medlemmer på forrige sæson. Herefter kan du vælge de personer på listen, du ønsker at invitere og vælge "Inviter alle valgte til en aktivitet" fra rullemenuen foroven.</p>',
 
         'fields' : (
         'person',
@@ -503,7 +522,7 @@ class PersonWaitinglistListFilter(admin.SimpleListFilter):
             return queryset.exclude(waitinglist__isnull=True)
         elif self.value() == 'none':
             return queryset.filter(waitinglist__isnull=True)
-        elif self.value() == None:
+        elif self.value() is None:
             return queryset
         else:
             return queryset.filter(waitinglist__department__pk=self.value())
@@ -548,7 +567,7 @@ class VolunteerListFilter(admin.SimpleListFilter):
             return queryset.filter(volunteer__isnull=False).filter(volunteer__removed__isnull=True).distinct()
         elif self.value() == 'none':
             return queryset.filter(volunteer__isnull=True).distinct() | queryset.exclude(volunteer__removed__isnull=True).distinct()
-        elif self.value() == None:
+        elif self.value() is None:
             return queryset
         else:
             return queryset.filter(volunteer__department__pk=self.value(),volunteer__removed__isnull=True)
@@ -593,7 +612,7 @@ class PersonParticipantListFilter(admin.SimpleListFilter):
             return queryset.filter(member__activityparticipant__isnull=True)
         elif(self.value() == 'any'):
             return queryset.exclude(member__activityparticipant__isnull=True)
-        elif(self.value() == None):
+        elif(self.value() is None):
             return queryset
         else:
             return queryset.filter(member__activityparticipant__activity=self.value())
@@ -638,7 +657,7 @@ class PersonInvitedListFilter(admin.SimpleListFilter):
             return queryset.filter(activityinvite__isnull=True)
         elif(self.value() == 'any'):
             return queryset.exclude(activityinvite__isnull=True)
-        elif(self.value() == None):
+        elif(self.value() is None):
             return queryset
         else:
             return queryset.filter(activityinvite__activity=self.value())
@@ -654,7 +673,7 @@ class PersonAdmin(admin.ModelAdmin):
     list_display = ('name', 'membertype', 'family_url', 'age_years', 'zipcode', 'added', 'notes')
     list_filter = ('membertype', 'gender', VolunteerListFilter, PersonWaitinglistListFilter, PersonInvitedListFilter, PersonParticipantListFilter)
     search_fields = ('name', 'family__email', 'notes')
-    actions = ['invite_to_own_activity', 'export_emaillist', 'export_csv']
+    actions = ['invite_many_to_activity_action', 'export_emaillist', 'export_csv']
 
     inlines = [PaymentInline, VolunteerInline, ActivityInviteInline, MemberInline, WaitingListInline]
 
@@ -663,6 +682,87 @@ class PersonAdmin(admin.ModelAdmin):
     family_url.allow_tags = True
     family_url.short_description = 'Familie'
     list_per_page = 20
+
+    def invite_many_to_activity_action(self,request, queryset):
+        # Get list of available departments
+        if request.user.is_superuser or request.user.has_perm('members.view_all_persons'):
+            deparment_list_query = Department.objects.all()
+        else:
+            deparment_list_query = Department.objects.filter(adminuserinformation__user=request.user)
+        deparment_list=[('-', '-')]
+        for department in deparment_list_query:
+            deparment_list.append((department.id, department.name))
+
+        # Get list of active and future activities
+        department_ids = deparment_list_query.values_list('id', flat=True)
+        activity_list_query = Activity.objects.filter(end_date__gt=timezone.now())
+        if not request.user.is_superuser:
+            activity_list_query = activity_list_query.filter(department__in=department_ids)
+        activity_list=[('-', '-')]
+        for activity in activity_list_query:
+            activity_list.append((activity.id, activity.department.name + ", " + activity.name))
+
+        # Form used to select department and activity - redundant department is for double check
+        class MassInvitationForm(forms.Form):
+            department = forms.ChoiceField(label='Afdeling', choices=deparment_list)
+            activity = forms.ChoiceField(label='Aktivitet', choices=activity_list)
+            expire = forms.DateField(label='Udløber', widget=AdminDateWidget(), initial=timezone.now() + timedelta(days=30*3))
+
+        # Lookup all the selected persons - to show confirmation list
+        persons = queryset
+
+        context = admin.site.each_context(request)
+        context['persons'] = persons
+        context['queryset'] = queryset
+
+        if request.method == 'POST' and 'department' in request.POST:
+            # Post request with data
+            mass_invitation_form = MassInvitationForm(request.POST)
+            context['mass_invitation_form'] = mass_invitation_form
+
+            if mass_invitation_form.is_valid() and mass_invitation_form.cleaned_data['activity'] != '-' and mass_invitation_form.cleaned_data['department'] != '-':
+                activity = Activity.objects.get(pk=mass_invitation_form.cleaned_data['activity'])
+
+                # validate activity belongs to user and matches selected department
+                if int(mass_invitation_form.cleaned_data['department']) in department_ids:
+                    if activity.department.id == int(mass_invitation_form.cleaned_data['department']):
+                        invited_counter = 0
+
+                        # get list of already created invitations on selected persons
+                        already_invited = Person.objects.filter(activityinvite__activity=mass_invitation_form.cleaned_data['activity'], activityinvite__person__in=queryset).all()
+                        list(already_invited) # force lookup
+                        already_invited_ids = already_invited.values_list('id', flat=True)
+
+                        # only save if all succeeds
+                        try:
+                            with transaction.atomic():
+                                for current_person in queryset:
+                                    if(current_person.id not in already_invited_ids):
+                                        invited_counter = invited_counter + 1
+                                        invitation = ActivityInvite(activity=activity, person=current_person, expire_dtm=mass_invitation_form.cleaned_data['expire'])
+                                        invitation.save()
+                        except Exception as e:
+                            messages.error(request, "Fejl - ingen personer blev inviteret! Der var problemer med " + invitation.person.name +  ". Vær sikker på personen ikke allerede er inviteret og opfylder alderskravet.")
+                            return
+
+                        # return ok message
+                        already_invited_text=""
+                        if(already_invited.count()):
+                            already_invited_text = ". Dog var : " + str.join(', ', already_invited.values_list('name', flat=True)) + " allerede inviteret!"
+                        messages.success(request, str(invited_counter) + " af " + str(queryset.count()) + " valgte personer blev inviteret til " + str(activity) + already_invited_text)
+                        return
+
+                    else:
+                        messages.error(request, "Valgt aktivitet stemmer ikke overens med valgt afdeling")
+                        return
+                else:
+                    messages.error(request, "Du kan kun invitere til egne afdelinger")
+                    return
+        else:
+            context['mass_invitation_form'] = MassInvitationForm()
+
+        return render(request, 'admin/invite_many_to_activity.html', context)
+    invite_many_to_activity_action.short_description = 'Inviter alle valgte til en aktivitet'
 
     # needs 'view_full_address' to set personal details.
     # email and phonenumber only shown on adults.
@@ -697,11 +797,7 @@ class PersonAdmin(admin.ModelAdmin):
             return []
 
     def unique(self, item):
-        return item.family.unique if item.family != None else ''
-
-    def invite_to_own_activity(self,request, queryset):
-        return HttpResponse("Ikke klar endnu. Vi implementerer denne når vi får tid. Tryk på hver person for at invitere i stedet for.")
-    invite_to_own_activity.short_description = "Inviter valgte personer til en aktivitet"
+        return item.family.unique if item.family is not None else ''
 
     def export_emaillist(self,request, queryset):
         result_string = "kopier denne liste direkte ind i dit email program (Husk at bruge Bcc!)\n\n"
@@ -766,6 +862,7 @@ admin.site.register(User, UserAdmin)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ['pk', 'added', 'payment_type', 'amount_ore', 'family', 'confirmed_dtm', 'cancelled_dtm', 'rejected_dtm', 'activityparticipant']
     list_filter = ['payment_type', 'activity']
+    raw_id_fields = ('person', 'activityparticipant', 'family')
     date_hierarchy = 'added'
     search_fields = ('family__email',)
     select_related = ('activityparticipant')
